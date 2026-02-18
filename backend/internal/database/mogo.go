@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -12,27 +11,36 @@ import (
 )
 
 var MongoClient *mongo.Client
+var MongoReady bool
 
 func ConnectMongo() {
 	uri := os.Getenv("MONGO_URI")
 	if uri == "" {
-		log.Fatal("MONGO_URI not set")
+		fmt.Println("⚠️ MONGO_URI not set")
+		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	for {
+		fmt.Println("⏳ Trying to connect Mongo...")
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-	if err != nil {
-		log.Fatal("Mongo connect error:", err)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+		cancel()
+
+		if err == nil {
+			ctxPing, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
+			err = client.Ping(ctxPing, nil)
+			cancelPing()
+
+			if err == nil {
+				fmt.Println("✅ Mongo connected")
+				MongoClient = client
+				MongoReady = true
+				return
+			}
+		}
+
+		fmt.Println("❌ Mongo not ready, retry in 3s...")
+		time.Sleep(3 * time.Second)
 	}
-
-	err = client.Ping(ctx, nil)
-	if err != nil {
-		log.Fatal("Mongo ping error:", err)
-	}
-
-	fmt.Println("✅ Connected to MongoDB")
-
-	MongoClient = client
 }

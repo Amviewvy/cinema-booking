@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"backend/internal/database"
 	"backend/internal/models"
@@ -10,6 +11,10 @@ import (
 )
 
 func GetSeats(showID string) ([]models.Seat, error) {
+
+	if database.MongoClient == nil {
+		return nil, fmt.Errorf("database not ready")
+	}
 	collection := database.MongoClient.Database("cinema").Collection("seats")
 
 	filter := bson.M{"show_id": showID}

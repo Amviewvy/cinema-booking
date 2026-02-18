@@ -33,8 +33,6 @@ func ReleaseLock(showID, seatID string) error {
 func LockSeat(showID, seatID, userID string) (bool, error) {
 	key := fmt.Sprintf("lock:show:%s:seat:%s", showID, seatID)
 
-	//err := RedisClient.Set(ctx, key, userID, 120*time.Second).Err()
-
 	result, err := database.RedisClient.SetNX(
 		database.Ctx,
 		key,

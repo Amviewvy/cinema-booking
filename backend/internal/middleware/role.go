@@ -11,7 +11,8 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 
 		roleInterface, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "no role"})
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "no role"})
 			c.Abort()
 			return
 		}

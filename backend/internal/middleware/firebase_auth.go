@@ -15,7 +15,7 @@ func FirebaseAuthMiddleware() gin.HandlerFunc {
 
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
+			c.JSON(401, gin.H{"error": "Missing token"})
 			c.Abort()
 			return
 		}
@@ -29,16 +29,23 @@ func FirebaseAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		emailClaims, ok := token.Claims["email"].(string)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "email not verified"})
+			c.Abort()
+			return
+		}
+
+		email := emailClaims
+
+		role := auth.GetRoleByEmail(email)
+
 		// ดึง uid
 		c.Set("user_id", token.UID)
 
-		// ดึง role จาก custom claim
-		role, ok := token.Claims["role"].(string)
-		if ok {
-			c.Set("role", role)
-		} else {
-			c.Set("role", "user") // default
-		}
+		c.Set("email", email)
+		c.Set("role", role)
+		c.Set("user_id", token.UID)
 
 		c.Next()
 	}

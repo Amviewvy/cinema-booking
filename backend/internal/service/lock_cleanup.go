@@ -16,16 +16,31 @@ import (
 func StartLockCleanupWorker() {
 	go func() {
 		for {
-			collection := database.MongoClient.Database("cinema").Collection("seats")
 
-			cursor, _ := collection.Find(
+			if database.MongoClient == nil {
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			collection := database.MongoClient.
+				Database("cinema").
+				Collection("seats")
+
+			cursor, err := collection.Find(
 				database.Ctx,
 				bson.M{"status": models.Locked},
 			)
+			if err != nil {
+				time.Sleep(5 * time.Second)
+				continue
+
+			}
 
 			for cursor.Next(database.Ctx) {
 				var seat models.Seat
-				cursor.Decode(&seat)
+				if err := cursor.Decode(&seat); err != nil {
+					continue
+				}
 
 				key := fmt.Sprintf("lock:show:%s:seat:%s", seat.ShowID, seat.SeatID)
 
@@ -33,12 +48,23 @@ func StartLockCleanupWorker() {
 
 				if err == redis.Nil {
 					// TTL หมดแล้ว → revert
+					fmt.Println("Seat released:", seat.SeatID)
+
+					LogEvent(models.AuditLog{
+						Event:   "BOOKING_TIMEOUT",
+						UserID:  seat.LockedBy,
+						ShowID:  seat.ShowID,
+						SeatID:  seat.SeatID,
+						Message: "Lock expired, seat auto released",
+					})
+
 					collection.UpdateOne(
 						database.Ctx,
 						bson.M{
-							"seat_id": seat.SeatID,
-							"show_id": seat.ShowID,
-							"status":  models.Locked,
+							"seat_id":   seat.SeatID,
+							"show_id":   seat.ShowID,
+							"status":    models.Locked,
+							"locked_by": seat.LockedBy,
 						},
 						bson.M{
 							"$set": bson.M{
@@ -51,10 +77,13 @@ func StartLockCleanupWorker() {
 					websocket.SendUpdate(gin.H{
 						"event":   "seat_released",
 						"seat_id": seat.SeatID,
+						"show_id": seat.ShowID,
 						"status":  "AVAILABLE",
 					})
 				}
 			}
+
+			cursor.Close(database.Ctx)
 
 			time.Sleep(5 * time.Second)
 		}

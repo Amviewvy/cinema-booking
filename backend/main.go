@@ -9,6 +9,8 @@ import (
 	"backend/internal/service"
 	"backend/internal/websocket"
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -16,6 +18,11 @@ import (
 )
 
 func seedSeats() {
+	if database.MongoClient == nil {
+		fmt.Println("⚠️ Mongo not ready, skip seeding")
+		return
+	}
+
 	collection := database.MongoClient.Database("cinema").Collection("seats")
 
 	count, _ := collection.CountDocuments(context.Background(), bson.M{})
@@ -36,15 +43,30 @@ func seedSeats() {
 		}
 	}
 
-	collection.InsertMany(context.Background(), seats)
+	if _, err := collection.InsertMany(context.Background(), seats); err != nil {
+		fmt.Println("⚠️ Failed to seed seats:", err)
+		return
+	}
+}
+
+func DatabaseReadyMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if database.MongoClient == nil {
+			c.JSON(503, gin.H{"error": "database not ready"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 
 func main() {
 	database.ConnectMongo()
 	database.ConnectRedis()
+
 	err := service.InitFirebase()
 	if err != nil {
-		panic(err)
+		fmt.Println("⚠️ Firebase initialization failed:", err)
 	}
 	seedSeats()
 
@@ -52,7 +74,9 @@ func main() {
 	websocket.StartBroadcast()
 	auth.InitFirebase()
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000"},
@@ -62,7 +86,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	r.GET("/seats", func(c *gin.Context) {
+	r.GET("/seats", DatabaseReadyMiddleware(), func(c *gin.Context) {
 		showID := c.DefaultQuery("show_id", "show1")
 
 		seats, err := repository.GetSeats(showID)
@@ -78,8 +102,71 @@ func main() {
 		middleware.FirebaseAuthMiddleware(),
 		middleware.RequireRole("admin"),
 		func(c *gin.Context) {
-
 			c.JSON(200, gin.H{"message": "Admin access granted"})
+		})
+
+	admin := r.Group("/admin")
+	admin.Use(middleware.FirebaseAuthMiddleware())
+	admin.Use(middleware.RequireRole("admin"))
+	admin.Use(DatabaseReadyMiddleware())
+
+	admin.GET("/logs", func(c *gin.Context) {
+
+		collection := database.MongoClient.
+			Database("cinema").
+			Collection("audit_logs")
+
+		cursor, err := collection.Find(context.Background(), bson.M{})
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		defer cursor.Close(context.Background())
+
+		var logs []models.AuditLog
+		if err := cursor.All(context.Background(), &logs); err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, logs)
+	})
+
+	r.GET("/admin/bookings",
+		middleware.FirebaseAuthMiddleware(),
+		middleware.RequireRole("admin"),
+		func(c *gin.Context) {
+
+			movie := c.Query("movie")
+			date := c.Query("date")
+
+			collection := database.MongoClient.
+				Database("cinema").
+				Collection("bookings")
+
+			filter := bson.M{}
+
+			if movie != "" {
+				filter["movie"] = movie
+			}
+
+			if date != "" {
+				filter["date"] = date
+			}
+
+			cursor, err := collection.Find(context.Background(), filter)
+			if err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+
+			var bookings []models.Booking
+			if err := cursor.All(context.Background(), &bookings); err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(200, bookings)
 		})
 
 	r.POST("/seats/lock",
@@ -97,6 +184,15 @@ func main() {
 				if err.Error() == "seat not available" || err.Error() == "seat already locked by someone else" {
 					status = 409
 				}
+
+				service.LogEvent(models.AuditLog{
+					Event:   "LOCK_FAILED",
+					UserID:  userID,
+					ShowID:  req.ShowID,
+					SeatID:  req.SeatID,
+					Message: err.Error(),
+				})
+
 				c.JSON(status, gin.H{"error": err.Error()})
 				return
 			}
@@ -168,7 +264,7 @@ func main() {
 				Database("cinema").
 				Collection("seats")
 
-			// 2️⃣ update LOCKED → BOOKED
+			//  update LOCKED → BOOKED
 			result, err := collection.UpdateOne(
 				context.Background(),
 				bson.M{
@@ -195,17 +291,43 @@ func main() {
 				return
 			}
 
-			// 3️⃣ ลบ Redis lock
+			bookingCollection := database.MongoClient.
+				Database("cinema").
+				Collection("bookings")
+
+			_, err = bookingCollection.InsertOne(context.Background(), models.Booking{
+				UserID: userID,
+				ShowID: req.ShowID,
+				SeatID: req.SeatID,
+				Movie:  "Avengers", // หรือ map จาก show_id
+				Date:   time.Now().Format("2006-01-02"),
+				Status: "SUCCESS",
+			})
+			if err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+
 			service.ReleaseLock(req.ShowID, req.SeatID)
 
-			// 4️⃣ broadcast real-time
+			service.LogEvent(models.AuditLog{
+				Event:   "BOOKING_SUCCESS",
+				UserID:  userID,
+				ShowID:  req.ShowID,
+				SeatID:  req.SeatID,
+				Message: "Seat successfully booked",
+			})
+
 			websocket.SendUpdate(gin.H{
 				"event":   "seat_booked",
 				"seat_id": req.SeatID,
 				"status":  "BOOKED",
 			})
 
-			c.JSON(200, gin.H{"message": "payment success"})
+			c.JSON(200, gin.H{
+				"success": true,
+				"message": "payment success",
+			})
 		},
 	)
 

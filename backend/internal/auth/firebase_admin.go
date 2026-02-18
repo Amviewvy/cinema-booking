@@ -12,14 +12,16 @@ import (
 var FirebaseClient *firebaseAuth.Client
 
 func InitFirebase() {
+	ctx := context.Background()
+
 	opt := option.WithCredentialsFile("firebase-service-account.json")
 
-	app, err := firebase.NewApp(context.Background(), nil, opt)
+	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		log.Fatalf("Firebase init error: %v", err)
 	}
 
-	client, err := app.Auth(context.Background())
+	client, err := app.Auth(ctx)
 	if err != nil {
 		log.Fatalf("Firebase auth error: %v", err)
 	}
