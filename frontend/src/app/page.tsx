@@ -19,8 +19,16 @@ export default function Home() {
   const [countdown, setCountdown] = useState<number>(0);
   const [role, setRole] = useState<string | null>(null);
   const router = useRouter();
-  
+ 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+//   const shows = [
+//   { id: "show1", movie: "Avengers", time: "7PM" },
+//   { id: "show2", movie: "Batman", time: "9PM" },
+//   { id: "show3", movie: "Interstellar", time: "6PM" },
+// ];
+
+// const [selectedShow, setSelectedShow] = useState(shows[0]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -99,6 +107,7 @@ useEffect(() => {
 
   const fetchSeats = async () => {
     const res = await fetch(`${API_URL}/seats?show_id=show1`);
+    //const res = await fetch(`${API_URL}/seats?show_id=${showId}`);
     const data = await res.json();
     setSeats(data);
 
@@ -122,6 +131,11 @@ useEffect(() => {
   };
 
   const handleBooking = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const token = await user.getIdToken(true);
+
     if (!token || !selectedSeat) return;
 
     const res = await fetch(`${API_URL}/seats/lock`, {
@@ -132,6 +146,7 @@ useEffect(() => {
       },
       body: JSON.stringify({
         show_id: "show1",
+        //show_id: selectedShow.id,
         seat_id: selectedSeat,
       }),
     });
@@ -148,6 +163,14 @@ useEffect(() => {
   };
 
   const handlePayment = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      alert("Please login to proceed with payment.");
+      return;
+    }
+
+    const token = await user.getIdToken(true);
+
     if (!token || !selectedSeat) return;
 
     const res = await fetch(`${API_URL}/payment/success`, {
@@ -163,14 +186,23 @@ useEffect(() => {
     });
 
     const data = await res.json();
-    if (data.success) {
-      alert("Payment successful! Your seat is booked.");
-    } else {
-      alert("Payment failed. Please try again.");
-    }
-    console.log(data);
 
-    await fetchSeats();
+    if (!res.ok) {
+      alert("Payment failed: " + data.error );
+      return;
+    }
+   
+
+    alert("🎉 Payment successful! Your seat is booked.");
+
+    // if (data.success) {
+    //   alert("Payment successful! Your seat is booked.");
+    // } else {
+    //   alert("Payment failed. Please try again.");
+    // }
+    // console.log(data);
+
+    //await fetchSeats();
 
   };
 
@@ -206,6 +238,33 @@ useEffect(() => {
         </div>
 
         <h2 className="text-xl mb-4">🎥 Show: Avengers - 7PM</h2>
+
+      {/*<div className="mb-6 text-center">
+  <div className="flex justify-center gap-4 mb-4">
+    {shows.map((show) => (
+      <button
+        key={show.id}
+        onClick={() => {
+          setSelectedShow(show);
+          setSelectedSeat(null);
+          setIsLocked(false);
+        }}
+        className={`px-4 py-2 rounded ${
+          selectedShow.id === show.id
+            ? "bg-green-600"
+            : "bg-gray-700"
+        }`}
+      >
+        {show.movie} - {show.time}
+      </button>
+    ))}
+  </div>
+
+  <h2 className="text-xl">
+    🎥 Show: {selectedShow.movie} - {selectedShow.time}
+  </h2>
+</div> */}
+      
 
         <div className="grid grid-cols-5 gap-4 mb-6">
           {seats.map((seat) => (
@@ -255,6 +314,8 @@ useEffect(() => {
             Choose your seat
           </button>
         )}
+
+        
       </>
     )}
   </div>

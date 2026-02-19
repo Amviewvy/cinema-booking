@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 
+
 type Booking = {
   user_id: string;
   seat_id: string;
@@ -12,13 +13,23 @@ type Booking = {
   status: string;
 };
 
+type AuditLog = {
+  Event: string;
+  UserID: string;
+  ShowID: string;
+  SeatID: string;
+  Message: string;
+  timestamp: string;
+};
+
 export default function AdminPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [movieFilter, setMovieFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const router = useRouter();
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
 
-  
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -39,8 +50,58 @@ export default function AdminPage() {
     });
 
     const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      console.error("Invaild bookings response: ", data);
+      setBookings([]);
+      return;
+    }
+    
+
     setBookings(data);
   };
+
+  const fetchLogs = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const token = await user.getIdToken(true);
+
+    const res = await fetch(`${API_URL}/admin/logs`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    if (!res.ok) {
+      console.error("API Error: ", res.status);
+      return;
+    }
+
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      console.error("Logs is not array: ", data);
+      return;
+    }
+
+    setLogs(data);
+    setShowLogs(true);
+
+    console.log("Logs: ", data);
+    
+    //console.log("Token: ", token);
+    //console.log("Calling:", `${API_URL}/admin/logs`);
+  };
+  
+  
+  //console.log("ADMIN API_URL:", process.env.NEXT_PUBLIC_API_URL);
+
+  const handleLogout = async () => {
+    await auth.signOut();
+    router.push("/");
+  };
+
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -63,21 +124,47 @@ export default function AdminPage() {
     if (movieFilter) url += `movie=${movieFilter}&`;
     if (dateFilter) url += `date=${dateFilter}`;
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
+    // if (tokenResult?.claims.role === "admin") {
+    //   router.push("/admin");
+    //   return;
+    // }
 
-    const data = await res.json();
-    
-    console.log("📦 Admin bookings:", data);
-    setBookings(data);
-  });
+    await fetchBookings();
+    await fetchLogs();
+    });
 
     return () => unsubscribe();
 
 }, [ ]);
+
+useEffect(() => {
+  if (!API_URL) {
+    console.error("API_URL is undefined");
+    return;
+  }
+
+  const wsUrl = API_URL.replace("http", "ws") + "/ws";
+  const ws = new WebSocket(wsUrl);
+
+  if (!auth.currentUser) return;
+
+  ws.onopen = () => {
+    console.log("Admin ws connected ");
+  }
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.event === "seat_booked" || 
+      data.event === "seat_locked" || 
+      data.event === "seat_released") {
+      fetchBookings();
+      fetchLogs();
+    }
+  };
+
+  return () => ws.close();
+}, [API_URL]);
 
   return (
     <div className="min-h-screen bg-black text-white p-10">
@@ -108,6 +195,17 @@ export default function AdminPage() {
         >
           Apply Filter
         </button>
+      <div className="flex-1 text-right">
+        <button
+          onClick={handleLogout}
+          className="text-red-400  hover:underline"
+        >
+          Logout
+        </button>
+      </div>
+        
+
+        
       </div>
 
       {/* Table */}
@@ -127,6 +225,7 @@ export default function AdminPage() {
             {Array.isArray(bookings) && 
             bookings.map((b, i) => (
               <tr key={i} className="border-b border-gray-700">
+                
                 <td className="p-3">{b.user_id}</td>
                 <td className="p-3">{b.seat_id}</td>
                 <td className="p-3">{b.movie}</td>
@@ -134,9 +233,36 @@ export default function AdminPage() {
                 <td className="p-3 text-green-400">{b.status}</td>
               </tr>
             ))}
+
+            
           </tbody>
         </table>
       </div>
+            {showLogs && (
+        <div className="mt-10">
+          <h2 className="text-xl mb-4">📜 Audit Logs</h2>
+          <table className="w-full text-left bg-gray-900 rounded">
+            <thead className="bg-gray-800">
+              <tr>
+                <th className="p-3">Event</th>
+                <th className="p-3">User</th>
+                <th className="p-3">Seat</th>
+                <th className="p-3">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log, i) => (
+                <tr key={i} className="border-b border-gray-700">
+                  <td className="p-3 text-yellow-400">{log.Event}</td>
+                  <td className="p-3">{log.UserID}</td>
+                  <td className="p-3">{log.SeatID}</td>
+                  <td className="p-3">{log.Message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

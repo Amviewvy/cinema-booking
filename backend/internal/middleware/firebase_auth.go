@@ -14,13 +14,15 @@ func FirebaseAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		authHeader := c.GetHeader("Authorization")
+		println("Auth HEADER:", authHeader)
+
 		if authHeader == "" {
 			c.JSON(401, gin.H{"error": "Missing token"})
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 
 		token, err := auth.FirebaseClient.VerifyIDToken(context.Background(), tokenString)
 		if err != nil {
