@@ -15,39 +15,54 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func seedSeats() {
-	if database.MongoClient == nil {
-		fmt.Println("⚠️ Mongo not ready, skip seeding")
-		return
-	}
+	// if database.MongoClient == nil {
+	// 	fmt.Println("⚠️ Mongo not ready, skip seeding")
+	// 	return
+	// }
 
-	collection := database.MongoClient.Database("cinema").Collection("seats")
+	collection := database.MongoClient.
+		Database("cinema").
+		Collection("seats")
 
-	count, _ := collection.CountDocuments(context.Background(), bson.M{})
-	if count > 0 {
-		return
-	}
+	shows := []string{"show1", "show2"}
 
-	seats := []interface{}{}
+	for _, showID := range shows {
 
-	for row := 'A'; row <= 'C'; row++ {
-		for num := 1; num <= 5; num++ {
-			seat := models.Seat{
-				SeatID: string(row) + string(rune('0'+num)),
-				ShowID: "show1",
-				Status: models.Available,
+		count, _ := collection.CountDocuments(
+			context.Background(),
+			bson.M{"show_id": showID},
+		)
+		if count > 0 {
+			fmt.Println("Seats exist for ", showID)
+			continue
+		}
+
+		var seats []interface{}
+
+		for row := 'A'; row <= 'C'; row++ {
+			for num := 1; num <= 5; num++ {
+				seats = append(seats, models.Seat{
+					SeatID: string(row) + fmt.Sprint(num),
+					ShowID: showID,
+					Status: models.Available,
+				})
+
 			}
-			seats = append(seats, seat)
+		}
+
+		//collection.InsertMany(context.Background(), seats)
+
+		if len(seats) > 0 {
+			collection.InsertMany(context.Background(), seats)
+			fmt.Println("Seeded seats for ", showID)
 		}
 	}
 
-	if _, err := collection.InsertMany(context.Background(), seats); err != nil {
-		fmt.Println("⚠️ Failed to seed seats:", err)
-		return
-	}
 }
 
 func DatabaseReadyMiddleware() gin.HandlerFunc {
@@ -61,6 +76,27 @@ func DatabaseReadyMiddleware() gin.HandlerFunc {
 	}
 }
 
+func ensureSeatIndex() {
+	collection := database.MongoClient.
+		Database("cinema").
+		Collection("seats")
+
+	indexModel := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "seat_id", Value: 1},
+			{Key: "show_id", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	}
+
+	_, err := collection.Indexes().CreateOne(context.Background(), indexModel)
+	if err != nil {
+		fmt.Println("❌ Failed to create seat index:", err)
+	} else {
+		fmt.Println("✅ Seat unique index ensured")
+	}
+}
+
 func main() {
 	database.ConnectMongo()
 	database.ConnectRedis()
@@ -69,11 +105,13 @@ func main() {
 	// if err != nil {
 	// 	fmt.Println("⚠️ Firebase initialization failed:", err)
 	// }
-	// seedSeats()
+	seedSeats()
 
 	service.StartLockCleanupWorker()
 	websocket.StartBroadcast()
 	auth.InitFirebase()
+	ensureSeatIndex()
+	//seedShows()
 
 	r := gin.New()
 	r.Use(gin.Logger())
@@ -97,6 +135,14 @@ func main() {
 		}
 		c.JSON(200, seats)
 
+	})
+
+	r.GET("/shows", func(c *gin.Context) {
+		shows := []gin.H{
+			{"id": "show1", "name": "Avengers"},
+			{"id": "show2", "name": "Batman"},
+		}
+		c.JSON(200, shows)
 	})
 
 	r.GET("/admin/seats",
@@ -138,8 +184,9 @@ func main() {
 
 	admin.GET("/bookings", func(c *gin.Context) {
 
-		movie := c.Query("movie")
-		date := c.Query("date")
+		//movie := c.Query("movie")
+		//date := c.Query("date")
+		showID := c.Query("show_id")
 
 		collection := database.MongoClient.
 			Database("cinema").
@@ -147,12 +194,16 @@ func main() {
 
 		filter := bson.M{}
 
-		if movie != "" {
-			filter["movie"] = movie
-		}
+		// if movie != "" {
+		// 	filter["movie"] = movie
+		// }
 
-		if date != "" {
-			filter["date"] = date
+		// if date != "" {
+		// 	filter["date"] = date
+		// }
+
+		if showID != "" {
+			filter["show_id"] = showID
 		}
 
 		cursor, err := collection.Find(context.Background(), filter)
@@ -305,11 +356,18 @@ func main() {
 				Database("cinema").
 				Collection("bookings")
 
+			movieName := ""
+			if req.ShowID == "show1" {
+				movieName = "Avengers"
+			} else if req.ShowID == "show2" {
+				movieName = "Batman"
+			}
+
 			_, err = bookingCollection.InsertOne(context.Background(), models.Booking{
 				UserID: userID,
 				ShowID: req.ShowID,
 				SeatID: req.SeatID,
-				Movie:  "Avengers",
+				Movie:  movieName,
 				Date:   time.Now().Format("2006-01-02"),
 				Status: "SUCCESS",
 			})

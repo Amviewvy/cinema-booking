@@ -24,7 +24,7 @@ type AuditLog = {
 
 export default function AdminPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [movieFilter, setMovieFilter] = useState("");
+  const [showFilter, setShowFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const router = useRouter();
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -40,8 +40,10 @@ export default function AdminPage() {
     const token = await user.getIdToken(true);
 
     let url = `${API_URL}/admin/bookings?`;
-    if (movieFilter) url += `movie=${movieFilter}&`;
+    if (showFilter) url += `show_id=${showFilter}&`;
     if (dateFilter) url += `date=${dateFilter}`;
+
+    
 
     const res = await fetch(url, {
       headers: {
@@ -121,7 +123,7 @@ export default function AdminPage() {
 
     let url = `${API_URL}/admin/bookings?`;
 
-    if (movieFilter) url += `movie=${movieFilter}&`;
+    if (showFilter) url += `show_id=${showFilter}&`;
     if (dateFilter) url += `date=${dateFilter}`;
 
     // if (tokenResult?.claims.role === "admin") {
@@ -146,7 +148,7 @@ useEffect(() => {
   const wsUrl = API_URL.replace("http", "ws") + "/ws";
   const ws = new WebSocket(wsUrl);
 
-  if (!auth.currentUser) return;
+  //if (!auth.currentUser) return;
 
   ws.onopen = () => {
     console.log("Admin ws connected ");
@@ -173,13 +175,13 @@ useEffect(() => {
       {/* Filters */}
       <div className="flex gap-4 mb-6">
         <select
-          value={movieFilter}
-          onChange={(e) => setMovieFilter(e.target.value)}
+          value={showFilter}
+          onChange={(e) => setShowFilter(e.target.value)}
           className="p-2 bg-gray-800 rounded"
         >
-          <option value="">All Movies</option>
-          <option value="Avengers">Avengers</option>
-          <option value="Batman">Batman</option>
+          <option value="">All Shows</option>
+          <option value="show1">Avengers</option>
+          <option value="show2">Batman</option>
         </select>
 
         <input
