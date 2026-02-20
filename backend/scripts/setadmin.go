@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 
-	uid := "teBGyRbyAaYcQIxzr7pCFtuERjw2" // 👈 เอา UID มาใส่ตรงนี้
+	uid := "teBGyRbyAaYcQIxzr7pCFtuERjw2"
 
 	err = client.SetCustomUserClaims(context.Background(), uid, map[string]interface{}{
 		"role": "admin",

@@ -126,10 +126,7 @@ export default function AdminPage() {
     if (showFilter) url += `show_id=${showFilter}&`;
     if (dateFilter) url += `date=${dateFilter}`;
 
-    // if (tokenResult?.claims.role === "admin") {
-    //   router.push("/admin");
-    //   return;
-    // }
+
 
     await fetchBookings();
     await fetchLogs();
@@ -148,7 +145,7 @@ useEffect(() => {
   const wsUrl = API_URL.replace("http", "ws") + "/ws";
   const ws = new WebSocket(wsUrl);
 
-  //if (!auth.currentUser) return;
+  
 
   ws.onopen = () => {
     console.log("Admin ws connected ");
@@ -210,7 +207,6 @@ useEffect(() => {
         
       </div>
 
-      {/* Table */}
       <div className="bg-gray-900 rounded-lg overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-gray-800">

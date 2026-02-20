@@ -26,13 +26,6 @@ export default function Home() {
 
   const currentShow = shows.find((s) => s.id === selectedShow);
 
-//   const shows = [
-//   { id: "show1", movie: "Avengers", time: "7PM" },
-//   { id: "show2", movie: "Batman", time: "9PM" },
-//   { id: "show3", movie: "Interstellar", time: "6PM" },
-// ];
-
-//const [selectedShow, setSelectedShow] = useState(shows[0]);
 
 useEffect(() => {
   if (!API_URL) return; 
@@ -75,14 +68,6 @@ const fetchSeats = async () => {
     setSeats(seatArray);
 
     if (!user) return;
-
-    // if (selectedSeat) {
-    //   const currentSeat = data.find((s: Seat) => s.seat_id === selectedSeat);
-    //   if (currentSeat?.status !== "LOCKED") {
-    //     setIsLocked(false);
-    //     setSelectedSeat(null);
-    //   }
-    // }
 
     const myLockedSeat = seatArray.find(
     (s: any) =>
@@ -221,7 +206,6 @@ useEffect(() => {
       },
       body: JSON.stringify({
         //show_id: "show1",
-        //show_id: selectedShow.id,
         show_id: selectedShow,
         seat_id: selectedSeat,
       }),
@@ -272,12 +256,6 @@ useEffect(() => {
 
     alert("🎉 Payment successful! Your seat is booked.");
 
-    // if (data.success) {
-    //   alert("Payment successful! Your seat is booked.");
-    // } else {
-    //   alert("Payment failed. Please try again.");
-    // }
-    // console.log(data);
 
     await fetchSeats();
     setIsLocked(false);
@@ -330,31 +308,7 @@ useEffect(() => {
 
         <h2 className="text-xl mb-4">🎥 Show:  {currentShow?.name}</h2>
 
-      {/*<div className="mb-6 text-center">
-  <div className="flex justify-center gap-4 mb-4">
-    {shows.map((show) => (
-      <button
-        key={show.id}
-        onClick={() => {
-          setSelectedShow(show);
-          setSelectedSeat(null);
-          setIsLocked(false);
-        }}
-        className={`px-4 py-2 rounded ${
-          selectedShow.id === show.id
-            ? "bg-green-600"
-            : "bg-gray-700"
-        }`}
-      >
-        {show.movie} - {show.time}
-      </button>
-    ))}
-  </div>
-
-  <h2 className="text-xl">
-    🎥 Show: {selectedShow.movie} - {selectedShow.time}
-  </h2>
-</div> */}
+    
       
 
         <div className="grid grid-cols-5 gap-4 mb-6">

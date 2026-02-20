@@ -47,7 +47,7 @@ func StartLockCleanupWorker() {
 				_, err := database.RedisClient.Get(database.Ctx, key).Result()
 
 				if err == redis.Nil {
-					// TTL หมดแล้ว → revert
+					// TTL หมดแล้ว ให้ revert
 					fmt.Println("Seat released:", seat.SeatID)
 
 					LogEvent(models.AuditLog{

@@ -15,7 +15,7 @@ func ValidateLockOwner(showID, seatID, userID string) (bool, error) {
 	val, err := database.RedisClient.Get(database.Ctx, key).Result()
 
 	if err == redis.Nil {
-		return false, nil // ไม่มี lock อยู่เลย
+		return false, nil
 	}
 
 	if err != nil {

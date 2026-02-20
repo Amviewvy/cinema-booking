@@ -20,10 +20,6 @@ import (
 )
 
 func seedSeats() {
-	// if database.MongoClient == nil {
-	// 	fmt.Println("⚠️ Mongo not ready, skip seeding")
-	// 	return
-	// }
 
 	collection := database.MongoClient.
 		Database("cinema").
@@ -101,10 +97,6 @@ func main() {
 	database.ConnectMongo()
 	database.ConnectRedis()
 
-	//err := service.InitFirebase()
-	// if err != nil {
-	// 	fmt.Println("⚠️ Firebase initialization failed:", err)
-	// }
 	seedSeats()
 
 	service.StartLockCleanupWorker()
@@ -198,10 +190,6 @@ func main() {
 		// 	filter["movie"] = movie
 		// }
 
-		// if date != "" {
-		// 	filter["date"] = date
-		// }
-
 		if showID != "" {
 			filter["show_id"] = showID
 		}
@@ -267,32 +255,6 @@ func main() {
 			c.JSON(200, gin.H{"message": "seat locked"})
 		})
 
-	// r.POST("/booking/confirm",
-	// 	middleware.FirebaseAuthMiddleware(),
-	// 	func(c *gin.Context) {
-	// 		var req models.BookingConfirmRequest
-	// 		if err := c.ShouldBindJSON(&req); err != nil {
-	// 			c.JSON(400, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
-	// 			return
-	// 		}
-
-	// 		userID := c.MustGet("user_id").(string)
-
-	// 		err := service.ConfirmBooking(req, userID)
-	// 		if err != nil {
-	// 			c.JSON(400, gin.H{"error": err.Error()})
-	// 			return
-	// 		}
-
-	// 		websocket.SendUpdate(gin.H{
-	// 			"event":   "seat_booked",
-	// 			"seat_id": req.SeatID,
-	// 			"status":  "BOOKED",
-	// 		})
-
-	// 		c.JSON(200, gin.H{"message": "การจองเสร็จสมบูรณ์!"})
-	// 	})
-
 	r.POST("/payment/success",
 		middleware.FirebaseAuthMiddleware(),
 		func(c *gin.Context) {
@@ -325,7 +287,7 @@ func main() {
 				Database("cinema").
 				Collection("seats")
 
-			//  update LOCKED → BOOKED
+			//  update LOCKED -> BOOKED
 			result, err := collection.UpdateOne(
 				context.Background(),
 				bson.M{
